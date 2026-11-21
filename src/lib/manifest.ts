@@ -13,9 +13,9 @@ import { serialsFromDeviceId, type ManifestUnmanaged } from "./unmanaged";
 export const MANIFEST_SCHEMA = 1;
 
 /**
- * 0.9.5: whether a printer prints two-sided, from its last Test: true or false when the Test succeeded, null when it
- * never ran or failed (unknown: agents then leave the driver alone). Old Test results without sidesSupported use the
- * stored duplex flag.
+ * 0.9.5: whether a printer prints two-sided, from its last successful Test (a failed Test is not stored, so the
+ * value from the previous successful one is kept); null when no Test result is stored (unknown: agents then leave the
+ * driver alone). Old Test results without sidesSupported use the stored duplex flag.
  */
 export function twoSidedFromTest(t: { error?: string | null; duplex?: boolean; sidesSupported?: string[] } | null | undefined): boolean | null {
   if (!t || t.error) return null;
@@ -37,7 +37,7 @@ export interface ManifestPrinterInput {
   legacyShares?: string[];
   legacyAliases?: string[];
   defaultSides?: "auto" | "one-sided" | "two-sided-long-edge" | "two-sided-short-edge";
-  /** 0.9.5: the printer prints two-sided (last Test: sides-supported); null when not tested or the Test failed. */
+  /** 0.9.5: the printer prints two-sided (last successful Test: sides-supported); null when never tested. */
   twoSided?: boolean | null;
   deviceUuid?: string | null;
   macAddresses?: string[];
