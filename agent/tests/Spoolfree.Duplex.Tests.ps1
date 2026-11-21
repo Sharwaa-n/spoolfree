@@ -34,3 +34,41 @@ Describe 'Default duplex' {
         { Set-SpoolfreeQueueDuplex -Name 'X' -Sides 'auto' } | Should -Throw
     }
 }
+
+Describe 'Installable duplex unit (0.9.5)' {
+    BeforeAll {
+        $script:NotInstalled = @(
+            [pscustomobject]@{ PropertyName = 'Config:Memory'; Value = '512MB' },
+            [pscustomobject]@{ PropertyName = 'Config:DuplexUnit'; Value = 'NotInstalled' }
+        )
+    }
+    It 'names the duplex property only for a two-sided printer whose driver says NotInstalled' {
+        Get-SpoolfreeDuplexUnitProperty -Properties $script:NotInstalled -TwoSided $true | Should -Be 'Config:DuplexUnit'
+        Get-SpoolfreeDuplexUnitProperty -Properties @([pscustomobject]@{ PropertyName = 'Config:Duplexer'; Value = 'NotInstalled' }) -TwoSided $true | Should -Be 'Config:Duplexer'
+    }
+    It 'leaves the driver alone when the printer is one-sided or unknown (old servers, no Test)' {
+        Get-SpoolfreeDuplexUnitProperty -Properties $script:NotInstalled -TwoSided $false | Should -BeNullOrEmpty
+        Get-SpoolfreeDuplexUnitProperty -Properties $script:NotInstalled -TwoSided $null | Should -BeNullOrEmpty
+        Get-SpoolfreeDuplexUnitProperty -Properties $script:NotInstalled -TwoSided 'true' | Should -BeNullOrEmpty
+    }
+    It 'never changes an Installed value or other properties' {
+        Get-SpoolfreeDuplexUnitProperty -Properties @([pscustomobject]@{ PropertyName = 'Config:DuplexUnit'; Value = 'Installed' }) -TwoSided $true | Should -BeNullOrEmpty
+        Get-SpoolfreeDuplexUnitProperty -Properties @([pscustomobject]@{ PropertyName = 'Config:Tray3'; Value = 'NotInstalled' }) -TwoSided $true | Should -BeNullOrEmpty
+        Get-SpoolfreeDuplexUnitProperty -Properties @([pscustomobject]@{ PropertyName = 'DuplexUnit'; Value = 'NotInstalled' }) -TwoSided $true | Should -BeNullOrEmpty
+        Get-SpoolfreeDuplexUnitProperty -Properties @() -TwoSided $true | Should -BeNullOrEmpty
+        Get-SpoolfreeDuplexUnitProperty -Properties $null -TwoSided $true | Should -BeNullOrEmpty
+    }
+    It 'sets the property to Installed on the queue' {
+        Mock -ModuleName Spoolfree.Agent Get-PrinterProperty { $script:NotInstalled }
+        Mock -ModuleName Spoolfree.Agent Set-PrinterProperty {}
+        Set-SpoolfreeDuplexUnit -Name 'Staff Color' -TwoSided $true | Should -Be 'Config:DuplexUnit'
+        Should -Invoke -ModuleName Spoolfree.Agent Set-PrinterProperty -Times 1 -Exactly -ParameterFilter { $PrinterName -eq 'Staff Color' -and $PropertyName -eq 'Config:DuplexUnit' -and $Value -eq 'Installed' }
+    }
+    It 'does not read or change the driver for a printer that is not two-sided' {
+        Mock -ModuleName Spoolfree.Agent Get-PrinterProperty { $script:NotInstalled }
+        Mock -ModuleName Spoolfree.Agent Set-PrinterProperty {}
+        Set-SpoolfreeDuplexUnit -Name 'Staff Mono' -TwoSided $false | Should -BeNullOrEmpty
+        Should -Invoke -ModuleName Spoolfree.Agent Get-PrinterProperty -Times 0
+        Should -Invoke -ModuleName Spoolfree.Agent Set-PrinterProperty -Times 0
+    }
+}

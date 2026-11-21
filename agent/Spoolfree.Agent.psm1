@@ -11,7 +11,7 @@
 
 Set-StrictMode -Version 2.0
 
-$script:AgentVersion = '0.9.4'
+$script:AgentVersion = '0.9.5'
 $script:RegistryRoot = 'HKLM:\SOFTWARE\Spoolfree'
 $script:PrinterRegistry = 'HKLM:\SOFTWARE\Spoolfree\Printers'
 $script:CommentPrefix = 'Managed by Spoolfree'
@@ -1875,6 +1875,40 @@ function Enable-SpoolfreeAutoDuplex {
     Set-PrintConfiguration -PrinterName $Name -PrintTicketXml $ticket -ErrorAction Stop
     if ($mode) { Set-PrintConfiguration -PrinterName $Name -DuplexingMode $mode -ErrorAction Stop }
     return 'automatic'
+}
+
+function Get-SpoolfreeDuplexUnitProperty {
+    <#
+    .SYNOPSIS
+        Pure (0.9.5): the driver property to set to 'Installed' so a vendor queue offers two-sided printing, or $null.
+        Drivers with an installable duplex unit (GPD feature, e.g. HP's 'Config:DuplexUnit') default to 'NotInstalled'
+        and learn the real value from the printer over SNMP; on a Standard TCP/IP port without SNMP they never do and
+        hide two-sided printing. Only when the server knows the printer prints two-sided (manifest printer.twoSided
+        is $true), and only a 'NotInstalled' value is changed: never the other way round.
+    #>
+    param([AllowNull()][object[]]$Properties, [AllowNull()]$TwoSided)
+    if ($TwoSided -isnot [bool] -or -not $TwoSided) { return $null }
+    foreach ($p in @($Properties)) {
+        $n = [string](Get-SpoolfreeProperty $p 'PropertyName')
+        $v = [string](Get-SpoolfreeProperty $p 'Value')
+        if ($n -match '^Config:[A-Za-z]*Duplex[A-Za-z]*$' -and $v -eq 'NotInstalled') { return $n }
+    }
+    return $null
+}
+
+function Set-SpoolfreeDuplexUnit {
+    <#
+    .SYNOPSIS
+        0.9.5: marks the vendor driver's installable duplex unit as installed on a queue for a two-sided printer.
+        Returns the property it set, or $null when nothing was needed. Throws on failure.
+    #>
+    param([Parameter(Mandatory)][string]$Name, [AllowNull()]$TwoSided)
+    if ($TwoSided -isnot [bool] -or -not $TwoSided) { return $null }
+    $props = @(Get-PrinterProperty -PrinterName $Name -ErrorAction Stop)
+    $prop = Get-SpoolfreeDuplexUnitProperty -Properties $props -TwoSided $TwoSided
+    if (-not $prop) { return $null }
+    Set-PrinterProperty -PrinterName $Name -PropertyName $prop -Value 'Installed' -ErrorAction Stop
+    return $prop
 }
 
 function Install-SpoolfreePrinter {
